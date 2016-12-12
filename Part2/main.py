@@ -1,6 +1,9 @@
 import numpy as np
 import matplotlib.dates as mdates
 from sklearn import svm
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import cross_val_score
 
 # siteNameDictionary maps col# to Dictionary Name
 siteNameDictionary = {}
@@ -14,9 +17,7 @@ def preprocess(inputFile, isTrainData):
     rawdata = ""
     outputFile = "temp_" + inputFile
     x = []
-    y1 = []
-    y2 = []
-    y3 = []
+    Y = []
     
     with open(inputFile) as fi:
         # outputDictionary maps '(dateTimeStamp)' to measures of all sites wind velocity
@@ -65,11 +66,12 @@ def preprocess(inputFile, isTrainData):
         
     else: # test data
         colsX = tuple(0,)
-        
-    x = np.loadtxt(outputFile, delimiter=',', usecols=colsX, converters={0:date_converter})
     
     if (isTrainData):
-        Y = np.loadtxt(outputFile, delimiter=",", usecols=colsY)
+        x = np.loadtxt(outputFile, delimiter=',', usecols=colsX, converters={0:date_converter})
+        Y = np.loadtxt(outputFile, delimiter=",", usecols=(colsY[1],))
+    else:
+        x = np.loadtxt(outputFile, delimiter=",", usecols=(1,))
         
     print ("Done preprocessing ", inputFile)
       
@@ -77,14 +79,29 @@ def preprocess(inputFile, isTrainData):
 
 print ("Opening TrainingData")
 trainingX, trainingY = preprocess("TrainingData.csv", True)
+X_train, X_test, y_train, y_test = train_test_split(trainingX, trainingY, test_size=0.4, random_state=0)
 print ("Done loading.")
 
 print ("Opening TestData")
 #testX = preprocess("TestData.csv", False) #doesn't work currently
 print ("Done loading.")
 
-print("SVM Fitting...");
-clf = svm.SVR()
-clf.fit(trainingX, trainingY)  
-print("Done.");
+classifiers = {}
+#classifiers["SVC"] = svm.SVC()
+classifiers["SVR"] = svm.SVR()
+#classifiers["Linear SVC"] = svm.LinearSVC()
+#classifiers["Linear SVR"] = svm.LinearSVR()
+
+for label, classifier in classifiers.items():
+    
+    print(label, "Fitting...");
+    clf = classifier
+    clf.fit(X_train, y_train)
+    print("Validating...")
+    predict = clf.predict(X_test)
+    mse = mean_squared_error(y_test, predict)
+    print ("MSE: ", mse)
+    scores = cross_val_score(clf, X_test, y_test, cv=5, scoring='neg_mean_squared_error')
+    print ("Scores: ", scores)
+    print("Accuracy: %0.2f (+/- %0.2f)" % (scores.mean(), scores.std() * 2))
 
